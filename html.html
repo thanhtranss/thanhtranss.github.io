@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+</head>
+<body>
+    <button id="connectButton">Kết Nối Ví</button>
+    <p>Số Dư: <span id="balance"></span></p>
+    <p>Mức Phê Duyệt Hiện Tại: <span id="allowance"></span></p>
+    <input id="amountInput" type="text" placeholder="Số Lượng Phê Duyệt">
+    <button id="approveButton">Phê Duyệt</button>
+    <script>
+        let tokenContract, userAddress, decimals;
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; // USDT trên mainnet, ví dụ
+        const smartContractAddress = "0x..."; // Địa chỉ smart contract của bạn
+        const tokenABI = [
+            // ABI tiêu chuẩn ERC-20, như đã nêu ở trên
+        ];
+
+        async function connectWallet() {
+            if (!window.ethereum) {
+                alert('Vui lòng cài đặt MetaMask');
+                return;
+            }
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddress = accounts[0];
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+                const chainId = await window.ethereum.chainId;
+                if (chainId !== '0x1') {
+                    try {
+                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] });
+                    } catch (error) {
+                        console.error('Failed to switch network:', error);
+                    }
+                }
+                decimals = await tokenContract.decimals();
+                const balance = await tokenContract.balanceOf(userAddress);
+                const allowance = await tokenContract.allowance(userAddress, smartContractAddress);
+                document.getElementById('balance').innerHTML = ethers.formatUnits(balance, decimals);
+                document.getElementById('allowance').innerHTML = ethers.formatUnits(allowance, decimals);
+            } catch (error) {
+                console.error('Error connecting wallet:', error);
+            }
+        }
+
+        async function approveToken() {
+            if (!tokenContract || !userAddress) {
+                alert('Vui lòng kết nối ví trước');
+                return;
+            }
+            try {
+                const amount = document.getElementById('amountInput').value;
+                if (!amount || isNaN(amount)) {
+                    alert('Vui lòng nhập số lượng hợp lệ');
+                    return;
+                }
+                const amountInWei = ethers.parseUnits(amount, decimals);
+                const tx = await tokenContract.approve(smartContractAddress, amountInWei);
+                alert(`Giao dịch đã được gửi. Hash: ${tx.hash}. Vui lòng chờ xác nhận.`);
+                await tx.wait();
+                alert('Phê duyệt thành công');
+                const allowance = await tokenContract.allowance(userAddress, smartContractAddress);
+                document.getElementById('allowance').innerHTML = ethers.formatUnits(allowance, decimals);
+            } catch (error) {
+                console.error('Error approving token:', error);
+                alert('Phê duyệt thất bại, vui lòng thử lại');
+            }
+        }
+
+        document.getElementById('connectButton').addEventListener('click', connectWallet);
+        document.getElementById('approveButton').addEventListener('click', approveToken);
+    </script>
+</body>
+</html>
