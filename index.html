@@ -11,10 +11,37 @@
     <button id="approveButton">Phê Duyệt</button>
     <script>
         let tokenContract, userAddress, decimals;
-        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; // USDT trên mainnet, ví dụ
-        const smartContractAddress = "0x..."; // Địa chỉ smart contract của bạn
+        const tokenAddress = "0xB4FBF2D519651410C81125dE02159A559640480f"; // WETH trên Goerli
+        const smartContractAddress = "0xYourSmartContractAddress"; // Thay bằng địa chỉ thực tế
         const tokenABI = [
-            // ABI tiêu chuẩn ERC-20, như đã nêu ở trên
+            {
+                "constant": true,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [{"name": "_owner", "type": "address"}, {"name": "_spender", "type": "address"}],
+                "name": "allowance",
+                "outputs": [{"name": "remaining", "type": "uint256"}],
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}],
+                "name": "approve",
+                "outputs": [{"name": "success", "type": "bool"}],
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [],
+                "name": "decimals",
+                "outputs": [{"name": "", "type": "uint8"}],
+                "type": "function"
+            }
         ];
 
         async function connectWallet() {
@@ -29,9 +56,9 @@
                 const signer = await provider.getSigner();
                 tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
                 const chainId = await window.ethereum.chainId;
-                if (chainId !== '0x1') {
+                if (chainId !== '0x5') { // Goerli chain ID
                     try {
-                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] });
+                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x5' }] });
                     } catch (error) {
                         console.error('Failed to switch network:', error);
                     }
