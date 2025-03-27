@@ -10,109 +10,97 @@
     <button id="connectButton">Connect to MetaMask</button>
     <br><br>
     <input type="text" id="amount" placeholder="Enter amount to approve">
-    <button id="approveButton">Approve</button>
+    <button id="approveButton" disabled>Approve</button>
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
-        const tokenA_address = "0x503Fa24B7972677F00C4618e5FBe237780C1df53"; // replace with actual token A address
-        const scB_address = "0xb300000b72DEAEb607a12d5f54773D1C19c7028d"; // replace with actual smart contract B address
-
-        if (typeof window.ethereum !== 'undefined') {
-            // Check if already connected
-            window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
-                if (accounts.length > 0) {
-                    document.getElementById('status').innerText = `Connected to account: ${accounts[0]}`;
-                }
-            });
-
-            // Event listeners
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts.length > 0) {
-                    document.getElementById('status').innerText = `Connected to account: ${accounts[0]}`;
-                } else {
-                    document.getElementById('status').innerText = 'Please connect to MetaMask';
-                }
-            });
-
-            window.ethereum.on('chainChanged', (chainId) => {
-                if (chainId === '0x38') {
-                    console.log('Switched to BSC');
-                } else {
-                    console.log('Switched to another chain');
-                }
-            });
-        }
+        const tokenA_address = "0x503Fa24B7972677F00C4618e5FBe237780C1df53";
+        const scB_address = "0xb300000b72DEAEb607a12d5f54773D1C19c7028d";
+        let signer;
 
         async function connect() {
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
-                    const signer = provider.getSigner();
-                    const address = await signer.getAddress();
-                    document.getElementById('status').innerText = `Connected to account: ${address}`;
-                    // Check and switch to BSC
-                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                    if (chainId !== '0x38') {
-                        try {
+            if (typeof window.ethereum === 'undefined') {
+                document.getElementById('status').innerText = 'MetaMask is not installed!';
+                return;
+            }
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (accounts.length === 0) throw new Error('No accounts found');
+                // Get current chainId
+                const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+                if (chainIdHex !== '0x38') {
+                    // Try to switch to BSC
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x38' }],
+                        });
+                    } catch (switchError) {
+                        if (switchError.code === 4902) {
+                            // Chain not added, add it
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: '0x38',
+                                    chainName: 'Binance Smart Chain',
+                                    nativeCurrency: {
+                                        name: 'BNB',
+                                        symbol: 'BNB',
+                                        decimals: 18,
+                                    },
+                                    rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                                    blockExplorerUrls: ['https://bscscan.com'],
+                                }],
+                            });
+                            // After adding, switch to it
                             await window.ethereum.request({
                                 method: 'wallet_switchEthereumChain',
                                 params: [{ chainId: '0x38' }],
                             });
-                        } catch (switchError) {
-                            if (switchError.code === 4902) {
-                                try {
-                                    await window.ethereum.request({
-                                        method: 'wallet_addEthereumChain',
-                                        params: [{
-                                            chainId: '0x38',
-                                            chainName: 'Binance Smart Chain',
-                                            nativeCurrency: {
-                                                name: 'BNB',
-                                                symbol: 'BNB',
-                                                decimals: 18,
-                                            },
-                                            rpcUrls: ['https://bsc-dataseed.binance.org/'],
-                                            blockExplorerUrls: ['https://bscscan.com'],
-                                        }],
-                                    });
-                                } catch (addError) {
-                                    console.error('Failed to add the chain:', addError);
-                                }
-                            } else {
-                                console.error('Failed to switch the chain:', switchError);
-                            }
+                        } else {
+                            throw switchError;
                         }
                     }
-                } catch (error) {
-                    console.error('Failed to connect:', error);
-                    document.getElementById('status').innerText = 'Failed to connect: ' + error.message;
                 }
-            } else {
-                document.getElementById('status').innerText = 'MetaMask is not installed!';
+                // Now, create provider with network configuration
+                const network = { chainId: 56, ensAddress: null };
+                const provider = new ethers.providers.Web3Provider(window.ethereum, network);
+                signer = provider.getSigner();
+                const address = await signer.getAddress();
+                document.getElementById('status').innerText = `Connected to account: ${address}`;
+                // Enable approve button
+                document.getElementById('approveButton').disabled = false;
+            } catch (error) {
+                document.getElementById('status').innerText = `Connection failed: ${error.message}`;
+                console.error('Connection failed:', error);
             }
         }
 
         async function approve() {
             const amountInput = document.getElementById('amount').value;
-            if (!amountInput) {
-                document.getElementById('status').innerText = 'Please enter an amount';
+            if (!amountInput || isNaN(amountInput) || Number(amountInput) <= 0) {
+                document.getElementById('status').innerText = 'Please enter a valid amount';
+                return;
+            }
+            if (!signer) {
+                document.getElementById('status').innerText = 'Please connect to MetaMask first';
                 return;
             }
             try {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                const signer = provider.getSigner();
+                const tokenA_address_checksum = ethers.utils.getAddress(tokenA_address);
+                const scB_address_checksum = ethers.utils.getAddress(scB_address);
                 const tokenAAbi = [
                     "function approve(address spender, uint256 amount) public returns (bool)",
                     "function decimals() public view returns (uint8)"
                 ];
-                const tokenAContract = new ethers.Contract(tokenA_address, tokenAAbi, signer);
-                const decimals = Number(await tokenAContract.decimals());
+                const tokenAContract = new ethers.Contract(tokenA_address_checksum, tokenAAbi, signer);
+                const decimals = await tokenAContract.decimals();
+                console.log('Decimals:', decimals);
                 const amount = ethers.utils.parseUnits(amountInput, decimals);
                 document.getElementById('status').innerText = 'Approving...';
-                const tx = await tokenAContract.approve(scB_address, amount);
-                console.log('Transaction sent:', tx.hash);
+                const tx = await tokenAContract.approve(scB_address_checksum, amount);
+                console.log('Transaction hash:', tx.hash);
                 await tx.wait();
-                document.getElementById('status').innerText = 'Approval successful';
+                document.getElementById('status').innerText = `Approval successful! Tx: ${tx.hash}`;
             } catch (error) {
                 document.getElementById('status').innerText = `Approval failed: ${error.message}`;
                 console.error('Approval failed:', error);
